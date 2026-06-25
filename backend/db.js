@@ -1,6 +1,6 @@
-require(".dotenv").config();
+require('dotenv').config();
 const mysql = require('mysql2');
-const db = mysql.createconnection ({
+const db = mysql.createConnection ({
     host: process.env.DB_HOST,
     user: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
@@ -12,7 +12,7 @@ db.connect(error => {
     if(error){
         console.error('mysql connectioin error', error);
     }else{
-        console.log('connected to mysql-helpdesk_db')
+        console.log('connected to mysql-helpdesk_db');
     }
 });
 
