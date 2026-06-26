@@ -71,6 +71,36 @@ app.get('/tickets/open', (req,res) => {
     });
 });
 
+// get /tickets/details - returns all tickets with JOIN user and department names
+
+app.get('/tickets/details', (req,res) =>{
+    const sql = 'SELECT t.id AS ticket_id, t.title, t.description, t.priority, t.status, t.created_at, CONCAT(u1.first_name, " ", u1.last_name) AS submitted_by, concat(u2.first_name, " ", u2.last_name) AS assigned_to, d.name AS department FROM tickets t join users u1 ON t.submitted_by = u1.id LEFT JOIN users u2 on t.assigned_to = u2.id JOIN departments d ON t.department_id = d.id ORDER BY t.created_at DESC';
+    db.query(sql, (error, results)=>{
+        if(error){
+            console.error('error getting ticket details: ', error);
+            return res.status(500).json({error: 'failed to get ticket details'});
+        }
+        res.json(results);
+    });
+});
+
+// get /tickets/:id/details - returns one ticket with join names
+
+app.get('/tickets/:id/details', (req,res)=>{
+    const ticketId = req.params.id;
+    const sql = 'SELECT t.id AS ticket_id, t.title, t.description, t.priority, t.status, t.created_at, CONCAT(u1.first_name, " ", u1.last_name) AS submitted_by, concat(u2.first_name, " ", u2.last_name) AS assigned_to, d.name AS department FROM tickets t join users u1 ON t.submitted_by = u1.id LEFT JOIN users u2 on t.assigned_to = u2.id JOIN departments d ON t.department_id = d.id WHERE t.id = ?';
+    db.query(sql, [ticketId], (error,results)=>{
+        if(error){
+            console.error('error getting ticket details: ', error);
+            return res.status(500).json({error: 'failed to get ticket details'})
+        }
+        if(results.length === 0) {
+            return res.status(404).json({error: 'ticket not found'});
+        }
+        res.json (results [0]);
+    });
+});
+
 // get /tickets/:id - returns single ticket by id number
 
 app.get('/tickets/:id', (req,res)=> {
@@ -180,7 +210,7 @@ app.post('/tickets', async (req, res) => {
         }
         res.status(201).json({message: 'ticket created successfully', ticketId: newTicketId});
     });
-})
+});
 
 // post/ticket-notes - add a note to t ticket in mongodb
 
@@ -225,7 +255,47 @@ app.post('/activity-logs', async (req,res)=>{
         console.error('error creating activity log: ', error);
         res.status(500).json({error: 'failed to create activity log'});
     }
-})
+});
+
+// post /login - validates the credentials and returns user informatoin with role
+
+app.post('/login', async(req,res)=>{
+    const{
+        email, password
+    } = req.body;
+    if(!email || !password){
+        return res.status(400).json({error: 'email and password are required'});
+    }
+    const sql = 'SELECT * FROM users WHERE email = ?';
+    db.query(sql, [email], async(error, results)=>{
+        if(error){
+            console.error('login query error: ', error);
+            return res.status(500).json({error: 'something went wrong'});
+        }
+        if(results.length === 0){
+            return res.status(401).json({error: 'invalid email or password'});
+        }
+        const user = results[0];
+        if(user.password !== password){
+            return res.status(401).json({error: 'invalid email or password'});
+        }
+        try{
+            const mongoDb = getMongo();
+            await mongoDb.collection('activity_logs').insertOne({
+                action: 'user_login', user_id: user.id, ticket_id: null, details: `${user.first_name} ${user.last_name} logged in as ${user.role}`,
+                Timestamp: new Date()
+            });
+        }catch(mongoError){
+            console.error('failed to log login activity: ', mongoError);
+        }
+        res.status(200).json({message: 'login successful',
+            first_name: user.first_name,
+            last_name: user.last_name,
+            role: user.role,
+            user_id: user.id
+        });
+    });
+});
 
 // start server - waits for mongodb before listening
 
